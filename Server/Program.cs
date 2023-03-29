@@ -1,10 +1,8 @@
 ﻿using System.Net.Sockets;
 using System.Net;
 using System.Text;
-using System.Diagnostics.CodeAnalysis;
-using System.Text.Json.Serialization;
 using System.Text.Json;
-using System.ComponentModel;
+using CryptoHelper;
 
 namespace Server
 {
@@ -15,27 +13,7 @@ namespace Server
         public static void Main(String[] args)
         {
             StartServer();
-            //var data = "#MSG|ip#";
-            //var split = data.Split('#', '|');
-            //Console.WriteLine(split[2]);
-            //var serialize = JsonSerializer.Serialize(lista);
-            //Console.WriteLine(serialize);
-            //var des = JsonSerializer.Deserialize<List<string>>(serialize);
-            //foreach (var item in des)
-            //{
-            //    Console.WriteLine(item);
-            //}
-            //var c1 = new Client("mario", "11.3.44.3");
-            //var c2 = new Client("luigi", "11.3.232423.3");
-            //var c3 = new Client("luca", "1r444.3.44.3");
-            //var clienti = new List<Client>();
-            //clienti.Add(c1); clienti.Add(c2);
-            //    clienti.Add(c3);
-            //List<string> managerList = clienti.Select(m => m.Nome).ToList();
-            //foreach (var item in managerList)
-            //{
-            //    Console.WriteLine(item);
-            //}
+
         }
 
         public static void StartServer()
@@ -67,9 +45,6 @@ namespace Server
                     Thread thread = new Thread(h => Worker((Socket)h));
                     thread.Start(handler);
 
-                    // Wait for the worker thread to finish
-                    //thread.Join();
-
                 }
 
             }
@@ -86,7 +61,7 @@ namespace Server
         {
             // Do some work in the worker thread
 
-            string name = getClientName(handler);
+            string name = receiveMsg(handler);
 
             var cliente = new Client(name, handler);
             clients.Add(cliente);
@@ -98,32 +73,28 @@ namespace Server
 
                 while (true)
                 {
-                    byte[] bytes = new byte[1024];
-                    int bytesRec = handler.Receive(bytes);
-                    string data = Encoding.ASCII.GetString(bytes, 0, bytesRec);
-                    Console.WriteLine($"msg ricevuto: {data}");
-                    switch (data)
-                    {
-                        case string s when s.StartsWith("#MSG|"):
-                            var split = data.Split('#', '|');
-                            sendToAll(cliente, $"{cliente.ToString()} said: {split[2]}");
-                            break;
-                        case string s when s.StartsWith("#MSGTO|"):
-                            sentToAnotherClient(cliente, data);
-                            break;
-                        case "#LIST#":
-                            sendListClient(cliente);
-                            break;
-                        default:
-                            break;
-                    }
 
-                    //Stop communication when receives string <STOP> or cliente close connection
-                    if (data == "#STOP#" || bytesRec == 0)
+                    string data = receiveMsg(handler);
+
+                    if (data.StartsWith("#MSG#"))
                     {
+                        sendToAll(cliente, $"{cliente.ToString()} said: {data.Replace("#MSG#", string.Empty)}");
+
+                    }else if (data.StartsWith("#MSGTO|"))
+                    {
+                        sentToAnotherClient(cliente, data);
+
+                    }else if(data == "#LIST#")
+                    {
+                        sendListClient(cliente);
+                    }
+                    else
+                    {
+                        sendMsg(handler,"comando non riconosciuto, connesione chiusa");
                         break;
                     }
 
+                    //if (data == "#STOP#" || bytesRec == 0)
                 }
             }
             catch (Exception)
@@ -143,10 +114,10 @@ namespace Server
             nameList.Remove(cliente.Nome);
 
             var serialize = JsonSerializer.Serialize(nameList);
-            byte[] msg = Encoding.ASCII.GetBytes($"#LIST#{serialize}");
-            cliente.handler.Send(msg);
 
-            Console.WriteLine($"Lista clienti mandata a ${cliente.Nome}");
+            sendMsg(cliente.handler, $"#LIST#{serialize}");
+
+            Console.WriteLine($"Lista clienti mandata a {cliente.Nome}");
         }
 
         private static void sentToAnotherClient(Client cliente, string data)
@@ -154,53 +125,63 @@ namespace Server
             var split = data.Split('#', '|');
             foreach (var item in clients)
             {
-                if (item.IP == split[2])
+                if (item.Nome == split[2])
                 {
-                    byte[] msg = Encoding.ASCII.GetBytes($"{cliente.ToString()} send to you: {split[3]}");
-                    cliente.handler.Send(msg);
+                    sendMsg(item.handler, $"{cliente.Nome}(PRIVATO) send to you: {split[3]}");
+
                     return;
                 }
             }
         }
 
-        private static string getClientName(Socket handler)
+        private static void sendMsg(Socket handler, string message)
         {
-            string data = "";
+            var cryptedData = Crypto.Encrypt(message);
+            byte[] msg = Encoding.ASCII.GetBytes(cryptedData);
+            handler.Send(msg);
+        }
+
+        public static string receiveMsg(Socket handler)
+        {
+            string decryptedData = "";
             try
             {
                 byte[] bytes = new byte[1024];
                 int bytesRec = handler.Receive(bytes);
-                data = Encoding.ASCII.GetString(bytes, 0, bytesRec);
+                string data = Encoding.ASCII.GetString(bytes, 0, bytesRec);
+                decryptedData = Crypto.Decrypt(data);
             }
             catch (Exception)
             {
 
             }
-            return data;
+            return decryptedData;
         }
 
         private static void sendToAll(Client cliente, string data)
         {
             Console.WriteLine(data);
 
-            byte[] msg = Encoding.ASCII.GetBytes(data);
+            var cryptedData = Crypto.Encrypt(data);
+            byte[] msg = Encoding.ASCII.GetBytes(cryptedData);
+
             try
             {
-foreach (var item in clients)
-            {
-                if (item.handler != cliente.handler)
+                foreach (var item in clients)
                 {
-                    item.handler.Send(msg);
-                }
+                    if (item.handler != cliente.handler)
+                    {
+                        item.handler.Send(msg);
+                    }
 
-            }
+                }
             }
             catch (Exception)
             {
 
-                
+
             }
-            
+
         }
     }
 

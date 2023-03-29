@@ -1,14 +1,19 @@
 ﻿using System.Net.Sockets;
 using System.Net;
 using System.Text;
+using System.Text.Json;
+using CryptoHelper;
 
 namespace Client
 {
     internal class Program
     {
+        public static List<string> clientList = new List<string>();
+        public static string nome;
         public static void Main(String[] args)
         {
             StartClient();
+            
         }
 
         public static void StartClient()
@@ -19,7 +24,7 @@ namespace Client
             {
                 //IPHostEntry host = Dns.GetHostEntry("localhost");
                 //IPAddress ipAddress = host.AddressList[0];
-                IPAddress ipAddress = IPAddress.Parse("10.100.0.126");
+                IPAddress ipAddress = IPAddress.Parse("10.100.0.137");
                 //IPAddress ipAddress = IPAddress.Parse("10.100.0.188");
                 IPEndPoint remoteEP = new IPEndPoint(ipAddress, 11000);
 
@@ -35,12 +40,13 @@ namespace Client
                     sender.Connect(remoteEP);
                     Console.WriteLine($"Socket connected to {sender.RemoteEndPoint}");
 
-                    SendMsgToClient(sender, Domanda("Inserisci il nome"));
+                    nome = Domanda("Inserisci il nome");
+                    SendMsgToClient(sender, nome);
 
-                    Thread send = new Thread(h => SendMsg((Socket)h));
+                    Thread send = new Thread(h => WorkerSender((Socket)h));
                     send.Start(sender);
 
-                    Thread receive = new Thread(h => ReceiveMsg((Socket)h));
+                    Thread receive = new Thread(h => WorkerReceiver((Socket)h));
                     receive.Start(sender);
                     
 
@@ -65,24 +71,15 @@ namespace Client
             }
         }
 
-        private static void SendMsg(Socket sender)
+        private static void WorkerSender(Socket sender)
         {
-            while (true)
+            bool stop = true;
+            printMenu();
+            while (stop)
             {
                 try
                 {
-                    string messaggio = Domanda("Scrivi messaggio da inviare(<STOP> per fermare la comunicazione): ");
-
-                    //// Encode the data string into a byte array
-                    //byte[] msg = Encoding.ASCII.GetBytes(messaggio);
-
-                    //// Send the data through the socket.
-                    //int bytesSent = sender.Send(msg);
-                    SendMsgToClient(sender, messaggio);
-
-                    //Stop communication when send string <STOP>
-                    if (messaggio == "<STOP>")
-                        break;
+                    stop = ElaboraScelta(sender);
                 }
                 catch (Exception)
                 {
@@ -95,16 +92,87 @@ namespace Client
             sender.Close();
         }
 
+        private static bool ElaboraScelta(Socket sender)
+        {
+
+            string scelta = Domanda("Seleziona funzione: ");
+            switch (scelta)
+            {
+                case "1":  
+                    SendMsgToClient(sender, "#MSG#" + Domanda("Scrivi messaggio da mandare: "));
+                    break;
+
+                case "2":
+                    sendMstToAnotherClient(sender);
+                    break;
+
+                case "3":
+                    listaClienti(sender);
+                    break;
+
+                case "x":
+                    SendMsgToClient(sender, "#STOP#");
+                    return false;
+                default:
+                    Console.WriteLine("comando non riconosciuto, riprova");
+                    break;
+            }
+            return true;
+        }
+
+        private static void sendMstToAnotherClient(Socket sender)
+        {
+            listaClienti(sender);
+
+            int num;
+            while (true)
+            {
+                try
+                {
+                    num = Convert.ToInt32(Domanda("Scegli l'utente: "));
+                        if (num >= 0 && num < clientList.Count)
+                             break;
+                }
+                catch (Exception)
+                {
+                  
+                    
+                }             
+                Console.WriteLine("Utente non trovato, riprova.");
+            }
+
+            SendMsgToClient(sender, $"#MSGTO|{clientList[num]}|{Domanda("Scrivi il messaggio da mandare: ")}");
+        }
+
+        private static void listaClienti(Socket sender)
+        {
+            SendMsgToClient(sender, "#LIST#");
+        }
+
+        public static void printMenu()
+        {
+            Console.Clear(); //pulisco schermo
+            Console.WriteLine("\tCiao\t" + nome + "\n\n");
+            Console.WriteLine("\tMenu\t\n");
+            Console.WriteLine("1\tInvio messaggio a tutti\n");
+            Console.WriteLine("2\tInvia messaggio a un client\n");
+            Console.WriteLine("3\tLista Client\n");
+            Console.WriteLine("x\tChiudi\n");
+            Console.WriteLine("Selezionare funzione fra quelle indicate: ");
+        }
+
         private static void SendMsgToClient(Socket sender, string messaggio)
         {
+            var crypted = Crypto.Encrypt(messaggio);
             // Encode the data string into a byte array
-            byte[] msg = Encoding.ASCII.GetBytes(messaggio);
+            byte[] msg = Encoding.ASCII.GetBytes(crypted);
 
+            
             // Send the data through the socket.
             int bytesSent = sender.Send(msg);
         }
 
-        private static void ReceiveMsg(Socket sender)
+        private static void WorkerReceiver(Socket sender)
         {
 
             while (true)
@@ -114,16 +182,39 @@ namespace Client
                     byte[] bytes = new byte[1024];
                     int bytesRec = sender.Receive(bytes);
                     //host remoto arresta la connessione con shutdown e tutti i dati sono disponibili sono ricevuti
-                    //sender.recevice restituirà 0
+                    //sender.recevice restituirà 0      
                     if (bytesRec == 0) break;
-                    Console.WriteLine(Encoding.ASCII.GetString(bytes, 0, bytesRec));
+
+                    string data = Encoding.ASCII.GetString(bytes, 0, bytesRec);
+                    data = Crypto.Decrypt(data);
+
+                    if (data.StartsWith("#LIST#"))
+                    {
+                        stampaLista(data);
+                    }
+                    else
+                    {
+                        Console.WriteLine(data);
+                    }
+       
                 }
                 catch (Exception e)
                 {
-                    Console.WriteLine(e.Message);
+                    //Console.WriteLine(e.Message);
                     break;
                 }
 
+            }
+        }
+
+        private static void stampaLista(string data)
+        {
+            clientList = JsonSerializer.Deserialize<List<string>>(data.Replace("#LIST#", string.Empty));
+            Console.WriteLine();
+
+            for (int i = 0; i < clientList.Count; i++)
+            {
+                Console.WriteLine(i + ") " + clientList[i]);
             }
         }
 
