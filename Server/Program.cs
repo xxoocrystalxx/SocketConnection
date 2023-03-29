@@ -21,9 +21,9 @@ namespace Server
             // Get Host IP Address that is used to establish a connection
             // In this case, we get one IP address of localhost that is IP : 127.0.0.1
             // If a host has multiple addresses, you will get a list of addresses
-            //IPHostEntry host = Dns.GetHostEntry("localhost");
-            //IPAddress ipAddress = host.AddressList[0];
-            IPAddress ipAddress = IPAddress.Parse("10.100.0.126");
+            IPHostEntry host = Dns.GetHostEntry("localhost");
+            IPAddress ipAddress = host.AddressList[0];
+            //IPAddress ipAddress = IPAddress.Parse("10.100.0.126");
             IPEndPoint localEndPoint = new IPEndPoint(ipAddress, 11000);
 
             try
@@ -80,18 +80,23 @@ namespace Server
                     {
                         sendToAll(cliente, $"{cliente.ToString()} said: {data.Replace("#MSG#", string.Empty)}");
 
-                    }else if (data.StartsWith("#MSGTO|"))
+                    }
+                    else if (data.StartsWith("#MSGTO|"))
                     {
                         sentToAnotherClient(cliente, data);
 
-                    }else if(data == "#LIST#")
+                    }
+                    else if (data == "#LIST#")
                     {
                         sendListClient(cliente);
                     }
+                    else if (data == "#STOP#" || data == "")
+                    {
+                        break;
+                    }
                     else
                     {
-                        sendMsg(handler,"comando non riconosciuto, connesione chiusa");
-                        break;
+                        sendMsg(handler, "Server: Comando non riconosciuto! Riprova");
                     }
 
                     //if (data == "#STOP#" || bytesRec == 0)
@@ -132,13 +137,22 @@ namespace Server
                     return;
                 }
             }
+            sendMsg(cliente.handler, "Server: Cliente non trovato. Ricordiamo che la formattazione deve essere #MSGTO|nomeCliente|messaggio#");
         }
 
         private static void sendMsg(Socket handler, string message)
         {
-            var cryptedData = Crypto.Encrypt(message);
-            byte[] msg = Encoding.ASCII.GetBytes(cryptedData);
-            handler.Send(msg);
+            try
+            {
+                var cryptedData = Crypto.Encrypt(message);
+                byte[] msg = Encoding.ASCII.GetBytes(cryptedData);
+                handler.Send(msg);
+            }
+            catch (Exception)
+            {
+
+            }
+
         }
 
         public static string receiveMsg(Socket handler)
@@ -178,8 +192,6 @@ namespace Server
             }
             catch (Exception)
             {
-
-
             }
 
         }

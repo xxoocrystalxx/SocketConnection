@@ -10,10 +10,11 @@ namespace Client
     {
         public static List<string> clientList = new List<string>();
         public static string nome;
+        public static bool isConnected = false;
         public static void Main(String[] args)
         {
             StartClient();
-            
+
         }
 
         public static void StartClient()
@@ -22,10 +23,9 @@ namespace Client
 
             try
             {
-                //IPHostEntry host = Dns.GetHostEntry("localhost");
-                //IPAddress ipAddress = host.AddressList[0];
-                IPAddress ipAddress = IPAddress.Parse("10.100.0.137");
-                //IPAddress ipAddress = IPAddress.Parse("10.100.0.188");
+                IPHostEntry host = Dns.GetHostEntry("localhost");
+                IPAddress ipAddress = host.AddressList[0];
+                //IPAddress ipAddress = IPAddress.Parse("10.100.0.137");
                 IPEndPoint remoteEP = new IPEndPoint(ipAddress, 11000);
 
                 // Create a TCP/IP  socket.
@@ -48,7 +48,7 @@ namespace Client
 
                     Thread receive = new Thread(h => WorkerReceiver((Socket)h));
                     receive.Start(sender);
-                    
+
 
                 }
                 catch (ArgumentNullException ane)
@@ -75,14 +75,15 @@ namespace Client
         {
             bool stop = true;
             printMenu();
-            while (stop)
+            while (stop && sender.Connected)
             {
                 try
                 {
                     stop = ElaboraScelta(sender);
                 }
-                catch (Exception)
+                catch (Exception e)
                 {
+                    Console.WriteLine(e);
                     break;
                 }
 
@@ -98,8 +99,8 @@ namespace Client
             string scelta = Domanda("Seleziona funzione: ");
             switch (scelta)
             {
-                case "1":  
-                    SendMsgToClient(sender, "#MSG#" + Domanda("Scrivi messaggio da mandare: "));
+                case "1":
+                    SendMsgToClient(sender, "#MSGt#" + Domanda("Scrivi messaggio da mandare: "));
                     break;
 
                 case "2":
@@ -107,7 +108,7 @@ namespace Client
                     break;
 
                 case "3":
-                    listaClienti(sender);
+                    SendMsgToClient(sender, "#LIST#");
                     break;
 
                 case "x":
@@ -122,31 +123,32 @@ namespace Client
 
         private static void sendMstToAnotherClient(Socket sender)
         {
-            listaClienti(sender);
+            SendMsgToClient(sender, "#LIST#");
+            Thread.Sleep(200);
 
+            if (clientList.Count == 0)
+            {
+                Console.WriteLine("Non ci sono altri utenti");
+                return;
+            }
             int num;
             while (true)
             {
                 try
                 {
                     num = Convert.ToInt32(Domanda("Scegli l'utente: "));
-                        if (num >= 0 && num < clientList.Count)
-                             break;
+                    if (num >= 0 && num < clientList.Count)
+                        break;
                 }
                 catch (Exception)
                 {
-                  
-                    
-                }             
-                Console.WriteLine("Utente non trovato, riprova.");
+
+
+                }
+                Console.WriteLine("Seleziona tra i numeri mostrati, riprova.");
             }
 
             SendMsgToClient(sender, $"#MSGTO|{clientList[num]}|{Domanda("Scrivi il messaggio da mandare: ")}");
-        }
-
-        private static void listaClienti(Socket sender)
-        {
-            SendMsgToClient(sender, "#LIST#");
         }
 
         public static void printMenu()
@@ -163,13 +165,20 @@ namespace Client
 
         private static void SendMsgToClient(Socket sender, string messaggio)
         {
-            var crypted = Crypto.Encrypt(messaggio);
-            // Encode the data string into a byte array
-            byte[] msg = Encoding.ASCII.GetBytes(crypted);
+            try
+            {
+                var crypted = Crypto.Encrypt(messaggio);
+                // Encode the data string into a byte array
+                byte[] msg = Encoding.ASCII.GetBytes(crypted);
 
-            
-            // Send the data through the socket.
-            int bytesSent = sender.Send(msg);
+
+                // Send the data through the socket.
+                int bytesSent = sender.Send(msg);
+            }
+            catch (Exception)
+            {
+            }
+
         }
 
         private static void WorkerReceiver(Socket sender)
@@ -196,7 +205,7 @@ namespace Client
                     {
                         Console.WriteLine(data);
                     }
-       
+
                 }
                 catch (Exception e)
                 {
