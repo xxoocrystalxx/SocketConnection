@@ -19,9 +19,9 @@ namespace Server
             // Get Host IP Address that is used to establish a connection
             // In this case, we get one IP address of localhost that is IP : 127.0.0.1
             // If a host has multiple addresses, you will get a list of addresses
-            IPHostEntry host = Dns.GetHostEntry("localhost");
-            IPAddress ipAddress = host.AddressList[0];
-            //IPAddress ipAddress = IPAddress.Parse("10.100.0.126");
+            //IPHostEntry host = Dns.GetHostEntry("localhost");
+            //IPAddress ipAddress = host.AddressList[0];
+            IPAddress ipAddress = IPAddress.Parse("10.100.0.126");
             IPEndPoint localEndPoint = new IPEndPoint(ipAddress, 11000);
 
             try
@@ -71,12 +71,12 @@ namespace Server
 
             try
             {
-                string data = null;
-                byte[] bytes = new byte[1024];
-                do
-                {
+               
+               while(true)
+                { 
+                    byte[] bytes = new byte[1024];
                     int bytesRec = handler.Receive(bytes);
-                    data = Encoding.ASCII.GetString(bytes, 0, bytesRec);
+                    string data = Encoding.ASCII.GetString(bytes, 0, bytesRec);
 
                     //Stop communication when receives string <STOP> or cliente close connection
                     if (data == "<STOP>" || bytesRec==0)
@@ -84,9 +84,9 @@ namespace Server
                         break;
                     }
                   
-                    sendToAll(cliente, $"{cliente.ToString()} ha mandato: {data}");
+                    sendToAll(cliente, $"{cliente.ToString()} said: {data}");
 
-                } while (data != null);
+                } 
             }
             catch (Exception)
             {
@@ -104,8 +104,6 @@ namespace Server
             string data = "";
             try
             {
-                byte[] msg = Encoding.ASCII.GetBytes("Inserisci il tuo nome");
-                handler.Send(msg);
                 byte[] bytes = new byte[1024];
                 int bytesRec = handler.Receive(bytes);
                 data = Encoding.ASCII.GetString(bytes, 0, bytesRec);
@@ -130,16 +128,6 @@ namespace Server
                 }
 
             }
-        }
-
-        private static String coding(String data, int n)
-        {
-            string text = "";
-            for (int i = 0; i < data.Length; i++)
-            {
-                text += (char)data[i] + n;
-            }
-            return text;
         }
     }
 

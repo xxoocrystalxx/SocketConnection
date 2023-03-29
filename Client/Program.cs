@@ -6,10 +6,9 @@ namespace Client
 {
     internal class Program
     {
-        public static int Main(String[] args)
+        public static void Main(String[] args)
         {
             StartClient();
-            return 0;
         }
 
         public static void StartClient()
@@ -18,9 +17,9 @@ namespace Client
 
             try
             {
-                IPHostEntry host = Dns.GetHostEntry("localhost");
-                IPAddress ipAddress = host.AddressList[0];
-                //IPAddress ipAddress = IPAddress.Parse("10.100.0.126");
+                //IPHostEntry host = Dns.GetHostEntry("localhost");
+                //IPAddress ipAddress = host.AddressList[0];
+                IPAddress ipAddress = IPAddress.Parse("10.100.0.126");
                 //IPAddress ipAddress = IPAddress.Parse("10.100.0.188");
                 IPEndPoint remoteEP = new IPEndPoint(ipAddress, 11000);
 
@@ -36,10 +35,14 @@ namespace Client
                     sender.Connect(remoteEP);
                     Console.WriteLine($"Socket connected to {sender.RemoteEndPoint}");
 
-                    Thread receive = new Thread(h => ReceiveMsg((Socket)h));
-                    receive.Start(sender);
+                    SendMsgToClient(sender, Domanda("Inserisci il nome"));
+
                     Thread send = new Thread(h => SendMsg((Socket)h));
                     send.Start(sender);
+
+                    Thread receive = new Thread(h => ReceiveMsg((Socket)h));
+                    receive.Start(sender);
+                    
 
                 }
                 catch (ArgumentNullException ane)
@@ -64,18 +67,18 @@ namespace Client
 
         private static void SendMsg(Socket sender)
         {
-            byte[] bytes = new byte[1024];
             while (true)
             {
                 try
                 {
-                    string messaggio = Domanda();
+                    string messaggio = Domanda("Scrivi messaggio da inviare(<STOP> per fermare la comunicazione): ");
 
-                    // Encode the data string into a byte array
-                    byte[] msg = Encoding.ASCII.GetBytes(messaggio);
+                    //// Encode the data string into a byte array
+                    //byte[] msg = Encoding.ASCII.GetBytes(messaggio);
 
-                    // Send the data through the socket.
-                    int bytesSent = sender.Send(msg);
+                    //// Send the data through the socket.
+                    //int bytesSent = sender.Send(msg);
+                    SendMsgToClient(sender, messaggio);
 
                     //Stop communication when send string <STOP>
                     if (messaggio == "<STOP>")
@@ -90,6 +93,15 @@ namespace Client
             Console.WriteLine("comunicazione chiusa");
             sender.Shutdown(SocketShutdown.Both);
             sender.Close();
+        }
+
+        private static void SendMsgToClient(Socket sender, string messaggio)
+        {
+            // Encode the data string into a byte array
+            byte[] msg = Encoding.ASCII.GetBytes(messaggio);
+
+            // Send the data through the socket.
+            int bytesSent = sender.Send(msg);
         }
 
         private static void ReceiveMsg(Socket sender)
@@ -115,9 +127,9 @@ namespace Client
             }
         }
 
-        public static string Domanda()
+        public static string Domanda(string msg)
         {
-            Console.WriteLine("Scrivi messaggio da inviare(<STOP> per fermare la comunicazione): ");
+            Console.WriteLine(msg);
             return Console.ReadLine();
         }
     }
